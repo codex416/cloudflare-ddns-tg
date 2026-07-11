@@ -1,11 +1,11 @@
 #!/bin/bash
 
 echo "================================="
-echo " Cloudflare DDNS + Telegram通知"
+echo " Cloudflare DDNS + Telegram Pro"
 echo " systemd守护模式"
-echo " 每分钟检测公网IP"
-echo " DNS自动校验"
+echo " 自动DNS校验"
 echo " IP变化TG通知"
+echo " 时间 UTC+8"
 echo "================================="
 
 
@@ -37,6 +37,10 @@ TG_TOKEN="$TG_TOKEN"
 TG_CHAT_ID="$TG_CHAT_ID"
 
 
+IP_FILE="/root/.cloudflare_last_ip"
+
+
+
 while true
 do
 
@@ -44,23 +48,29 @@ do
 CURRENT_IP=\$(curl -4 -s https://api.ipify.org)
 
 
+
 if [ -z "\$CURRENT_IP" ]; then
+
     sleep 60
     continue
+
 fi
 
 
 
 OLD_IP=""
 
-if [ -f /root/.cloudflare_last_ip ]; then
-    OLD_IP=\$(cat /root/.cloudflare_last_ip)
+if [ -f "\$IP_FILE" ]; then
+
+OLD_IP=\$(cat \$IP_FILE)
+
 fi
 
 
 
 
-# 获取Zone ID
+
+# 获取 Zone ID
 
 ZONE_ID=\$(curl -s \
 "https://api.cloudflare.com/client/v4/zones?name=\$DOMAIN" \
@@ -70,9 +80,9 @@ ZONE_ID=\$(curl -s \
 
 
 
-if [ -z "\$ZONE_ID" ] || [ "\$ZONE_ID" = "null" ]; then
+if [ "\$ZONE_ID" = "null" ] || [ -z "\$ZONE_ID" ]; then
 
-echo "获取Zone失败"
+echo "Zone ID 获取失败"
 
 sleep 60
 
@@ -84,7 +94,8 @@ fi
 
 
 
-# 获取DNS记录ID
+# 获取 DNS Record ID
+
 
 RECORD_ID=\$(curl -s \
 "https://api.cloudflare.com/client/v4/zones/\$ZONE_ID/dns_records?name=\$RECORD" \
@@ -94,9 +105,9 @@ RECORD_ID=\$(curl -s \
 
 
 
-if [ -z "\$RECORD_ID" ] || [ "\$RECORD_ID" = "null" ]; then
+if [ "\$RECORD_ID" = "null" ] || [ -z "\$RECORD_ID" ]; then
 
-echo "获取DNS记录失败"
+echo "DNS记录获取失败"
 
 sleep 60
 
@@ -108,7 +119,8 @@ fi
 
 
 
-# 获取DNS当前IP
+# 获取Cloudflare当前解析IP
+
 
 DNS_IP=\$(curl -s \
 "https://api.cloudflare.com/client/v4/zones/\$ZONE_ID/dns_records/\$RECORD_ID" \
@@ -119,24 +131,30 @@ DNS_IP=\$(curl -s \
 
 
 
-echo "======================"
 
-echo "\$(date)"
+echo "============================"
 
-echo "公网IP: \$CURRENT_IP"
+echo "\$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S')"
 
-echo "DNS IP: \$DNS_IP"
+echo "公网IP:"
+echo "\$CURRENT_IP"
 
-echo "旧记录: \$OLD_IP"
+echo "Cloudflare DNS:"
+echo "\$DNS_IP"
 
-
-
-
-
-if [ "\$CURRENT_IP" != "\$DNS_IP" ]; then
+echo "============================"
 
 
-echo "发现IP变化，更新DNS..."
+
+
+
+# DNS校验
+
+if [ "\$CURRENT_IP" != "\$DNS_IP" ] || [ "\$CURRENT_IP" != "\$OLD_IP" ]; then
+
+
+
+echo "检测到IP变化，更新DNS..."
 
 
 
@@ -154,14 +172,21 @@ RESULT=\$(curl -s -X PUT \
 
 
 
+
+
 SUCCESS=\$(echo "\$RESULT" | jq -r '.success')
+
+
 
 
 
 if [ "\$SUCCESS" = "true" ]; then
 
 
-echo "\$CURRENT_IP" >/root/.cloudflare_last_ip
+
+echo "\$CURRENT_IP" > \$IP_FILE
+
+
 
 
 
@@ -177,7 +202,9 @@ MESSAGE="🚨 Cloudflare DDNS更新成功
 \$CURRENT_IP
 
 时间:
-\$(date '+%Y-%m-%d %H:%M:%S')"
+\$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S') UTC+8"
+
+
 
 
 
@@ -189,11 +216,14 @@ curl -s -X POST \
 
 
 
-echo "更新完成"
+
+
+echo "更新成功"
 
 
 
 else
+
 
 
 echo "Cloudflare更新失败"
@@ -201,11 +231,14 @@ echo "Cloudflare更新失败"
 echo "\$RESULT"
 
 
+
 fi
 
 
 
+
 else
+
 
 
 echo "DNS正常，无需更新"
@@ -216,10 +249,13 @@ fi
 
 
 
+
 sleep 60
 
 
+
 done
+
 EOF
 
 
@@ -232,11 +268,12 @@ chmod 700 /root/cloudflare-ddns-tg.sh
 
 
 
+
 cat > /etc/systemd/system/cloudflare-ddns-tg.service <<EOF
 
 [Unit]
 
-Description=Cloudflare DDNS Telegram
+Description=Cloudflare DDNS Telegram Pro
 
 After=network-online.target
 
@@ -275,7 +312,6 @@ systemctl restart cloudflare-ddns-tg
 
 
 
-
 echo ""
 
 echo "================================="
@@ -284,14 +320,12 @@ echo "安装完成"
 
 echo ""
 
-echo "查看状态:"
-
+echo "状态查看:"
 echo "systemctl status cloudflare-ddns-tg"
 
 echo ""
 
-echo "查看日志:"
-
+echo "实时日志:"
 echo "journalctl -u cloudflare-ddns-tg -f"
 
 echo "================================="
