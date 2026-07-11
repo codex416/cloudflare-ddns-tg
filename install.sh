@@ -3,9 +3,9 @@
 echo "================================="
 echo " Cloudflare DDNS + Telegram Pro"
 echo " systemd守护模式"
-echo " 自动DNS校验"
+echo " DNS自动校验"
 echo " IP变化TG通知"
-echo " 时间 UTC+8"
+echo " 时间北京时间"
 echo "================================="
 
 
@@ -58,19 +58,29 @@ fi
 
 
 
-OLD_IP=""
+# 首次运行初始化
 
-if [ -f "\$IP_FILE" ]; then
+if [ ! -f "\$IP_FILE" ]; then
 
-OLD_IP=\$(cat \$IP_FILE)
+    echo "\$CURRENT_IP" > "\$IP_FILE"
+
+    echo "首次运行，记录当前IP: \$CURRENT_IP"
+
+    sleep 60
+
+    continue
 
 fi
 
 
 
+OLD_IP=\$(cat "\$IP_FILE")
 
 
-# 获取 Zone ID
+
+
+
+# 获取Zone ID
 
 ZONE_ID=\$(curl -s \
 "https://api.cloudflare.com/client/v4/zones?name=\$DOMAIN" \
@@ -82,7 +92,7 @@ ZONE_ID=\$(curl -s \
 
 if [ "\$ZONE_ID" = "null" ] || [ -z "\$ZONE_ID" ]; then
 
-echo "Zone ID 获取失败"
+echo "获取Zone ID失败"
 
 sleep 60
 
@@ -94,8 +104,7 @@ fi
 
 
 
-# 获取 DNS Record ID
-
+# 获取DNS记录ID
 
 RECORD_ID=\$(curl -s \
 "https://api.cloudflare.com/client/v4/zones/\$ZONE_ID/dns_records?name=\$RECORD" \
@@ -107,7 +116,7 @@ RECORD_ID=\$(curl -s \
 
 if [ "\$RECORD_ID" = "null" ] || [ -z "\$RECORD_ID" ]; then
 
-echo "DNS记录获取失败"
+echo "获取DNS记录失败"
 
 sleep 60
 
@@ -119,8 +128,7 @@ fi
 
 
 
-# 获取Cloudflare当前解析IP
-
+# 获取Cloudflare当前DNS IP
 
 DNS_IP=\$(curl -s \
 "https://api.cloudflare.com/client/v4/zones/\$ZONE_ID/dns_records/\$RECORD_ID" \
@@ -136,11 +144,9 @@ echo "============================"
 
 echo "\$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S')"
 
-echo "公网IP:"
-echo "\$CURRENT_IP"
+echo "公网IP: \$CURRENT_IP"
 
-echo "Cloudflare DNS:"
-echo "\$DNS_IP"
+echo "DNS IP: \$DNS_IP"
 
 echo "============================"
 
@@ -184,7 +190,7 @@ if [ "\$SUCCESS" = "true" ]; then
 
 
 
-echo "\$CURRENT_IP" > \$IP_FILE
+echo "\$CURRENT_IP" > "\$IP_FILE"
 
 
 
@@ -202,7 +208,7 @@ MESSAGE="🚨 Cloudflare DDNS更新成功
 \$CURRENT_IP
 
 时间:
-\$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S') UTC+8"
+\$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S')"
 
 
 
@@ -225,11 +231,9 @@ echo "更新成功"
 else
 
 
-
 echo "Cloudflare更新失败"
 
 echo "\$RESULT"
-
 
 
 fi
@@ -240,13 +244,11 @@ fi
 else
 
 
-
 echo "DNS正常，无需更新"
 
 
 
 fi
-
 
 
 
@@ -311,7 +313,6 @@ systemctl restart cloudflare-ddns-tg
 
 
 
-
 echo ""
 
 echo "================================="
@@ -320,12 +321,12 @@ echo "安装完成"
 
 echo ""
 
-echo "状态查看:"
+echo "查看状态:"
 echo "systemctl status cloudflare-ddns-tg"
 
 echo ""
 
-echo "实时日志:"
+echo "查看日志:"
 echo "journalctl -u cloudflare-ddns-tg -f"
 
 echo "================================="
